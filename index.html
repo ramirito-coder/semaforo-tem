@@ -3,100 +3,117 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control Remoto Semáforo MQTT Global v2</title>
+    <title>Acceso Semáforo IoT</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f4; padding-top: 30px; }
-        h1 { color: #333; }
-        .panel { background: white; max-width: 450px; margin: 0 auto; padding: 20px; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #eef2f5; padding-top: 40px; }
+        .box { background: white; max-width: 400px; margin: 0 auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        h2 { margin-top: 0; color: #333; }
+        input { width: 85%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+        .btn { padding: 12px 20px; font-size: 16px; margin: 8px; border: none; border-radius: 6px; cursor: pointer; color: white; font-weight: bold; width: 90%; }
+        .btn-login { background-color: #28a745; }
+        .btn-rojo { background-color: #dc3545; width: auto; }
+        .btn-amarillo { background-color: #ffc107; color: black; width: auto; }
+        .btn-verde { background-color: #28a745; width: auto; }
+        .btn-modo { background-color: #17a2b8; width: 42%; }
+        .btn-auto { background-color: #6f42c1; width: 42%; }
+        #panel-control { display: none; } /* Oculto hasta iniciar sesión */
+        #error-login { color: red; font-weight: bold; display: none; }
         .info-box { font-size: 18px; margin: 15px 0; font-weight: bold; }
-        .btn { display: inline-block; padding: 12px 25px; font-size: 16px; margin: 8px; border: none; border-radius: 6px; cursor: pointer; color: white; font-weight: bold; }
-        .btn-rojo { background-color: #ff4d4d; }
-        .btn-amarillo { background-color: #e6b800; color: black; }
-        .btn-verde { background-color: #00cc66; }
-        .btn-modo { background-color: #008CBA; }
-        .btn-auto { background-color: #8E44AD; }
-        .btn:hover { opacity: 0.85; }
-        #status-conexion { color: gray; font-size: 14px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <div class="panel">
-        <h1>Control Semáforo MQTT</h1>
-        <p id="status-conexion">Conectando al servidor MQTT seguro...</p>
+    <!-- 1. PANTALLA DE LOGIN -->
+    <div id="pantalla-login" class="box">
+        <h2>Iniciar Sesión</h2>
+        <p>Introduce tus datos para acceder al Semáforo</p>
+        <input type="text" id="userInput" placeholder="Nombre de usuario"><br>
+        <input type="password" id="passInput" placeholder="Contraseña"><br>
+        <button onclick="validarAcceso()" class="btn btn-login">Entrar</button>
+        <p id="error-login">Usuario o contraseña incorrectos</p>
+    </div>
 
-        <div class="info-box">
-            Modo de Operación: <span id="modo-valor" style="color: #8E44AD;">Cargando...</span>
-        </div>
-        <div class="info-box">
-            Color Actual: <span id="estado-valor" style="color: #0056b3;">Sincronizando...</span>
-        </div>
+    <!-- 2. PANEL DE CONTROL DEL SEMÁFORO -->
+    <div id="panel-control" class="box">
+        <h2>Control de Semáforo IoT</h2>
+        <p id="status-conexion" style="color: gray;">Conectando...</p>
+
+        <div class="info-box">Modo: <span id="modo-valor" style="color: #6f42c1;">---</span></div>
+        <div class="info-box">Estado: <span id="estado-valor" style="color: #007bff;">---</span></div>
 
         <hr>
-        <h3>Seleccionar Modo</h3>
-        <button onclick="enviarComando('AUTO')" class="btn btn-auto">Modo Automático</button>
-        <button onclick="enviarComando('MANUAL')" class="btn btn-modo">Modo Manual</button>
+        <h3>Modos</h3>
+        <button onclick="enviarComando('AUTO')" class="btn btn-auto">Automático</button>
+        <button onclick="enviarComando('MANUAL')" class="btn btn-modo">Manual</button>
 
         <hr>
-        <h3>Control Manual de Colores</h3>
-        <div>
-            <button onclick="enviarComando('ROJO')" class="btn btn-rojo">Rojo</button>
-            <button onclick="enviarComando('AMARILLO')" class="btn btn-amarillo">Amarillo</button>
-            <button onclick="enviarComando('VERDE')" class="btn btn-verde">Verde</button>
-        </div>
+        <h3>Control Manual</h3>
+        <button onclick="enviarComando('ROJO')" class="btn btn-rojo">Rojo</button>
+        <button onclick="enviarComando('AMARILLO')" class="btn btn-amarillo">Amarillo</button>
+        <button onclick="enviarComando('VERDE')" class="btn btn-verde">Verde</button>
     </div>
 
     <script>
+        // CONFIGURACIÓN DE TU USUARIO Y CONTRASEÑA DE ACCESO
+        const USUARIO_CORRECTO = "ramiro";
+        const PASSWORD_CORRECTO = "1234";
+
+        // Configuración MQTT
         const brokerHost = "broker.hivemq.com";
         const brokerPort = 8884;
-        const path = "/mqtt";
-        const clientId = "Web_Control_Ramiro_" + Math.random().toString(16).substr(2, 6);
+        const clientId = "Web_Ramiro_" + Math.random().toString(16).substr(2, 6);
 
-        const topicComando = "ramiro/semaforo/comando";
-        const topicEstado = "ramiro/semaforo/estado";
-        const topicModo = "ramiro/semaforo/modo";
+        const topicComando = "ramiro_semaforo_privado_2026/comando";
+        const topicEstado = "ramiro_semaforo_privado_2026/estado";
+        const topicModo = "ramiro_semaforo_privado_2026/modo";
 
-        const client = new Paho.MQTT.Client(brokerHost, brokerPort, path, clientId);
+        let client = null;
 
-        client.onConnectionLost = onConnectionLost;
-        client.onMessageArrived = onMessageArrived;
+        function validarAcceso() {
+            const user = document.getElementById("userInput").value;
+            const pass = document.getElementById("passInput").value;
 
-        client.connect({
-            useSSL: true,
-            onSuccess: onConnect,
-            onFailure: function(err) {
-                document.getElementById("status-conexion").innerText = "Error: " + err.errorMessage;
-                document.getElementById("status-conexion").style.color = "red";
-            }
-        });
-
-        function onConnect() {
-            document.getElementById("status-conexion").innerText = "● Conectado a la nube (Seguro)";
-            document.getElementById("status-conexion").style.color = "green";
-            client.subscribe(topicEstado);
-            client.subscribe(topicModo);
-        }
-
-        function onConnectionLost(responseObject) {
-            if (responseObject.errorCode !== 0) {
-                document.getElementById("status-conexion").innerText = "● Conexión perdida. Reconectando...";
-                document.getElementById("status-conexion").style.color = "red";
+            if (user === USUARIO_CORRECTO && pass === PASSWORD_CORRECTO) {
+                document.getElementById("pantalla-login").style.display = "none";
+                document.getElementById("panel-control").style.display = "block";
+                iniciarMQTT();
+            } else {
+                document.getElementById("error-login").style.display = "block";
             }
         }
 
-        function onMessageArrived(message) {
-            if (message.destinationName === topicEstado) {
-                document.getElementById("estado-valor").innerText = message.payloadString;
-            } else if (message.destinationName === topicModo) {
-                document.getElementById("modo-valor").innerText = message.payloadString;
-            }
+        function iniciarMQTT() {
+            client = new Paho.MQTT.Client(brokerHost, brokerPort, "/mqtt", clientId);
+            client.onConnectionLost = function() {
+                document.getElementById("status-conexion").innerText = "● Conexión perdida";
+                document.getElementById("status-conexion").style.color = "red";
+            };
+            client.onMessageArrived = function(message) {
+                if (message.destinationName === topicEstado) {
+                    document.getElementById("estado-valor").innerText = message.payloadString;
+                } else if (message.destinationName === topicModo) {
+                    document.getElementById("modo-valor").innerText = message.payloadString;
+                }
+            };
+
+            client.connect({
+                useSSL: true,
+                onSuccess: function() {
+                    document.getElementById("status-conexion").innerText = "● Conectado (Sesión Iniciada)";
+                    document.getElementById("status-conexion").style.color = "green";
+                    client.subscribe(topicEstado);
+                    client.subscribe(topicModo);
+                }
+            });
         }
 
         function enviarComando(comando) {
-            const message = new Paho.MQTT.Message(comando);
-            message.destinationName = topicComando;
-            client.send(message);
+            if (client && client.isConnected()) {
+                const message = new Paho.MQTT.Message(comando);
+                message.destinationName = topicComando;
+                client.send(message);
+            }
         }
     </script>
 </body>

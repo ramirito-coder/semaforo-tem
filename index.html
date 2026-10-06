@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Remoto Semáforo MQTT Global v2</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f4; padding-top: 30px; }
+        h1 { color: #333; }
+        .panel { background: white; max-width: 450px; margin: 0 auto; padding: 20px; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .info-box { font-size: 18px; margin: 15px 0; font-weight: bold; }
+        .btn { display: inline-block; padding: 12px 25px; font-size: 16px; margin: 8px; border: none; border-radius: 6px; cursor: pointer; color: white; font-weight: bold; }
+        .btn-rojo { background-color: #ff4d4d; }
+        .btn-amarillo { background-color: #e6b800; color: black; }
+        .btn-verde { background-color: #00cc66; }
+        .btn-modo { background-color: #008CBA; }
+        .btn-auto { background-color: #8E44AD; }
+        .btn:hover { opacity: 0.85; }
+        #status-conexion { color: gray; font-size: 14px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="panel">
+        <h1>Control Semáforo MQTT</h1>
+        <p id="status-conexion">Conectando al servidor MQTT seguro...</p>
+
+        <div class="info-box">
+            Modo de Operación: <span id="modo-valor" style="color: #8E44AD;">Cargando...</span>
+        </div>
+        <div class="info-box">
+            Color Actual: <span id="estado-valor" style="color: #0056b3;">Sincronizando...</span>
+        </div>
+
+        <hr>
+        <h3>Seleccionar Modo</h3>
+        <button onclick="enviarComando('AUTO')" class="btn btn-auto">Modo Automático</button>
+        <button onclick="enviarComando('MANUAL')" class="btn btn-modo">Modo Manual</button>
+
+        <hr>
+        <h3>Control Manual de Colores</h3>
+        <div>
+            <button onclick="enviarComando('ROJO')" class="btn btn-rojo">Rojo</button>
+            <button onclick="enviarComando('AMARILLO')" class="btn btn-amarillo">Amarillo</button>
+            <button onclick="enviarComando('VERDE')" class="btn btn-verde">Verde</button>
+        </div>
+    </div>
+
+    <script>
+        const brokerHost = "broker.hivemq.com";
+        const brokerPort = 8884;
+        const path = "/mqtt";
+        const clientId = "Web_Control_Ramiro_" + Math.random().toString(16).substr(2, 6);
+
+        const topicComando = "ramiro/semaforo/comando";
+        const topicEstado = "ramiro/semaforo/estado";
+        const topicModo = "ramiro/semaforo/modo";
+
+        const client = new Paho.MQTT.Client(brokerHost, brokerPort, path, clientId);
+
+        client.onConnectionLost = onConnectionLost;
+        client.onMessageArrived = onMessageArrived;
+
+        client.connect({
+            useSSL: true,
+            onSuccess: onConnect,
+            onFailure: function(err) {
+                document.getElementById("status-conexion").innerText = "Error: " + err.errorMessage;
+                document.getElementById("status-conexion").style.color = "red";
+            }
+        });
+
+        function onConnect() {
+            document.getElementById("status-conexion").innerText = "● Conectado a la nube (Seguro)";
+            document.getElementById("status-conexion").style.color = "green";
+            client.subscribe(topicEstado);
+            client.subscribe(topicModo);
+        }
+
+        function onConnectionLost(responseObject) {
+            if (responseObject.errorCode !== 0) {
+                document.getElementById("status-conexion").innerText = "● Conexión perdida. Reconectando...";
+                document.getElementById("status-conexion").style.color = "red";
+            }
+        }
+
+        function onMessageArrived(message) {
+            if (message.destinationName === topicEstado) {
+                document.getElementById("estado-valor").innerText = message.payloadString;
+            } else if (message.destinationName === topicModo) {
+                document.getElementById("modo-valor").innerText = message.payloadString;
+            }
+        }
+
+        function enviarComando(comando) {
+            const message = new Paho.MQTT.Message(comando);
+            message.destinationName = topicComando;
+            client.send(message);
+        }
+    </script>
+</body>
+</html>
